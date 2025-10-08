@@ -1,0 +1,194 @@
+import os
+import tkinter as tk
+from tkinter import filedialog, messagebox
+import re
+import base64
+import random
+import string
+
+class obfuscater:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("python code obfuscater")
+        self.root.geometry("600x400")
+        
+        main_frame = tk.Frame(self.root, padx=20, pady=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        title_label = tk.Label(main_frame, text="python code obfuscater", 
+                              font=("Arial", 16, "bold"))
+        title_label.pack(pady=10)
+        
+        instructions = tk.Label(main_frame, 
+                               text="select a python file to obfuscate strings, variables, functions, and hide print statements.",
+                               wraplength=500, justify=tk.LEFT)
+        instructions.pack(pady=10)
+        
+        self.select_btn = tk.Button(main_frame, text="select py file", 
+                                   command=self.select_file,
+                                   bg="#4CAF50", fg="white", 
+                                   font=("Arial", 12), padx=20, pady=10)
+        self.select_btn.pack(pady=20)
+        
+        self.file_label = tk.Label(main_frame, text="no file selected", 
+                                  wraplength=500, justify=tk.LEFT)
+        self.file_label.pack(pady=10)
+        
+        options_frame = tk.Frame(main_frame)
+        options_frame.pack(pady=10, fill=tk.X)
+        
+        self.encrypt_strings_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(options_frame, text="encrypt strings", 
+                      variable=self.encrypt_strings_var).pack(anchor=tk.W)
+        
+        self.obfuscate_vars_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(options_frame, text="obfuscate variable names", 
+                      variable=self.obfuscate_vars_var).pack(anchor=tk.W)
+        
+        self.obfuscate_funcs_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(options_frame, text="obfuscate function names", 
+                      variable=self.obfuscate_funcs_var).pack(anchor=tk.W)
+        
+        self.hide_prints_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(options_frame, text="hide print statements", 
+                      variable=self.hide_prints_var).pack(anchor=tk.W)
+        
+        self.obfuscate_btn = tk.Button(main_frame, text="obfuscate", 
+                                      command=self.obfuscate_file,
+                                      bg="#2196F3", fg="white", 
+                                      font=("Arial", 12), padx=20, pady=10,
+                                      state=tk.DISABLED)
+        self.obfuscate_btn.pack(pady=20)
+        
+        self.selected_file = None
+        
+    def select_file(self):
+        file_path = filedialog.askopenfilename(
+            title="select python file",
+            filetypes=[("python files", "*.py"), ("all files", "*.*")]
+        )
+        
+        if file_path:
+            self.selected_file = file_path
+            self.file_label.config(text=f"selected: {file_path}")
+            self.obfuscate_btn.config(state=tk.NORMAL)
+    
+    def generate_random_name(self, length=4):
+        return '_' + ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(length))
+    
+    def encrypt_string(self, s):
+        encoded = base64.b64encode(s.encode()).decode()
+        return encoded[::-1] + '_' + str(random.randint(1000, 9999))
+    
+    def decrypt_string_code(self, encrypted_str, var_name):
+        return f'''base64.b64decode("{encrypted_str.split('_')[0][::-1]}").decode()'''
+    
+    def obfuscate_strings(self, code):
+        strings_found = re.findall(r'(\'[^\']*\'|\"[^\"]*\")', code)
+        string_mapping = {}
+        
+        for s in strings_found:
+            clean_string = s[1:-1]
+            if clean_string and len(clean_string) > 1:
+                encrypted = self.encrypt_string(clean_string)
+                string_mapping[s] = encrypted
+        
+        for original, encrypted in string_mapping.items():
+            var_name = self.generate_random_name()
+            decrypt_code = self.decrypt_string_code(encrypted, var_name)
+            code = code.replace(original, decrypt_code)
+        
+        return code
+    
+    def obfuscate_identifiers(self, code):
+        variables = set(re.findall(r'\b([a-z_][a-z0-9_]*)\s*=', code, re.IGNORECASE))
+        functions = set(re.findall(r'\bdef\s+([a-z_][a-z0-9_]*)\s*\(', code, re.IGNORECASE))
+        params = set(re.findall(r'def\s+[a-z_][a-z0-9_]*\s*\(([^)]*)\)', code, re.IGNORECASE))
+        for param_str in params:
+            param_list = re.findall(r'([a-z_][a-z0-9_]*)', param_str, re.IGNORECASE)
+            variables.update(param_list)
+        
+        reserved = {
+            'and', 'as', 'assert', 'break', 'class', 'continue', 'def', 'del',
+            'elif', 'else', 'except', 'false', 'finally', 'for', 'from', 'global',
+            'if', 'import', 'in', 'is', 'lambda', 'none', 'nonlocal', 'not', 'or',
+            'pass', 'raise', 'return', 'true', 'try', 'while', 'with', 'yield',
+            'self', 'print', 'input', 'len', 'range', 'str', 'int', 'float', 'list',
+            'dict', 'set', 'tuple', 'base64'
+        }
+        
+        identifiers = (variables | functions) - reserved
+        identifiers = [id for id in identifiers if len(id) > 2]
+        
+        mapping = {}
+        for identifier in identifiers:
+            mapping[identifier] = self.generate_random_name()
+        
+        for old_name, new_name in mapping.items():
+            code = re.sub(r'\b' + re.escape(old_name) + r'\b', new_name, code)
+        
+        return code
+    
+    def hide_print_statements(self, code):
+        print_pattern = r'print\s*\((.*?)\)'
+        prints = re.findall(print_pattern, code)
+        
+        for print_content in prints:
+            if print_content.strip():
+                encoded = base64.b64encode(f"print({print_content})".encode()).decode()
+                reversed_encoded = encoded[::-1]
+                replacement = f'exec(__import__("base64").b64decode("{reversed_encoded[::-1]}").decode())'
+                code = code.replace(f'print({print_content})', replacement)
+        
+        return code
+    
+    def obfuscate_file(self):
+        if not self.selected_file:
+            messagebox.showerror("error", "no file selected!")
+            return
+        
+        try:
+            with open(self.selected_file, 'r', encoding='utf-8') as file:
+                original_code = file.read()
+            
+            obfuscated_code = original_code
+            
+            if self.encrypt_strings_var.get() or self.hide_prints_var.get():
+                if 'import base64' not in obfuscated_code:
+                    obfuscated_code = 'import base64\n' + obfuscated_code
+            
+            if self.encrypt_strings_var.get():
+                obfuscated_code = self.obfuscate_strings(obfuscated_code)
+            
+            if self.obfuscate_vars_var.get() or self.obfuscate_funcs_var.get():
+                obfuscated_code = self.obfuscate_identifiers(obfuscated_code)
+            
+            if self.hide_prints_var.get():
+                obfuscated_code = self.hide_print_statements(obfuscated_code)
+            
+            output_path = self.selected_file.replace('.py', '_obfuscated.py')
+            
+            with open(output_path, 'w', encoding='utf-8') as file:
+                file.write(obfuscated_code)
+            
+            messagebox.showinfo("success", 
+                              f"file obfuscated successfully!\n"
+                              f"obfuscated file: {output_path}\n\n"
+                              f"the file is ready to run!")
+            
+            self.selected_file = None
+            self.file_label.config(text="no file selected")
+            self.obfuscate_btn.config(state=tk.DISABLED)
+            
+        except Exception as e:
+            messagebox.showerror("error", f"obfuscation failed: {str(e)}")
+    
+    def run(self):
+        self.root.mainloop()
+
+def main():
+    app = obfuscater()
+    app.run()
+
+if __name__ == "__main__":
+    main()
